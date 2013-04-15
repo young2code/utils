@@ -1,5 +1,7 @@
 #include "Log.h"
 
+#include "CSLocker.h"
+
 #include <windows.h>
 #include <iostream>
 #include <iomanip>
@@ -14,6 +16,7 @@ namespace Log
 {
 	const int BUFFER_SIZE = 1024;
 
+	bool gInitialized = false;
 	bool gEnable = true;
 
 	HMODULE gLibModule;
@@ -22,25 +25,16 @@ namespace Log
 	CRITICAL_SECTION gLogCS;
 #endif
 
-	class GlobalLocker
-	{
-#ifdef LOG_THREAD_SAFE
-	public:
-		Locker()
-		{
-			EnterCriticalSection(&gLogCS);
-		}
-
-		~Locker()
-		{
-			LeaveCriticalSection(&gLogCS);
-		}
-#endif
-	};
-
 	void Error(const char * fileName, const char * funcName, int line, const char * msg, ...)
 	{
-		GlobalLocker lock;
+		if (!gInitialized)
+		{
+			return;
+		}
+
+#ifdef LOG_THREAD_SAFE
+		CSLocker lock(&gLogCS);
+#endif
 
 		char buffer[BUFFER_SIZE] = {0,};
 		va_list args;
@@ -57,7 +51,14 @@ namespace Log
 
 	void Error(const char * fileName, const char * funcName, int line, int code, const char * msg, ...)
 	{
-		GlobalLocker lock;
+		if (!gInitialized)
+		{
+			return;
+		}
+
+#ifdef LOG_THREAD_SAFE
+		CSLocker lock(&gLogCS);
+#endif
 
 		char* lpMessageBuffer;
 
@@ -91,9 +92,16 @@ namespace Log
 
 	void Log(const char * msg, ...)
 	{
+		if (!gInitialized)
+		{
+			return;
+		}
+
 		if( gEnable )
 		{
-			GlobalLocker lock;
+#ifdef LOG_THREAD_SAFE
+		CSLocker lock(&gLogCS);
+#endif
 	
 			char buffer[BUFFER_SIZE] = {0,};
 			va_list args;
@@ -115,6 +123,8 @@ namespace Log
 #endif
 
 		gLibModule = LoadLibraryA("NTDLL.DLL");
+
+		gInitialized = true;
 	}
 
 	void Shutdown()
@@ -130,6 +140,7 @@ namespace Log
 #ifdef LOG_THREAD_SAFE
 		DeleteCriticalSection(&gLogCS);
 #endif
+		gInitialized = false;
 	}
 
 	void EnableTrace(bool enable)
