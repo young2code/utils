@@ -16,8 +16,8 @@ namespace Log
 {
 	const int BUFFER_SIZE = 1024;
 
-	bool gInitialized = false;
-	bool gEnable = true;
+	volatile bool gInitialized = false;
+	volatile bool gEnable = true;
 
 	HMODULE gLibModule;
 
@@ -27,7 +27,7 @@ namespace Log
 
 	void Error(const char * fileName, const char * funcName, int line, const char * msg, ...)
 	{
-		if (!gInitialized)
+		if (!gInitialized || !gEnable)
 		{
 			return;
 		}
@@ -35,23 +35,22 @@ namespace Log
 #ifdef LOG_THREAD_SAFE
 		CSLocker lock(&gLogCS);
 #endif
-
 		char buffer[BUFFER_SIZE] = {0,};
 		va_list args;
 		va_start(args, msg);
 		vsnprintf_s(buffer, BUFFER_SIZE, BUFFER_SIZE-1, msg, args);
 		va_end(args);
 
-		wstringstream output;
+		stringstream output;
 		output << "File: " << fileName << "\nFunction: " << funcName << "\nLine: " << line << "\nError: " << buffer << endl;
 
-		OutputDebugString(output.str().c_str());
-
+		OutputDebugStringA(output.str().c_str());
+ 		cout << output.str().c_str() << endl;
 	}
 
 	void Error(const char * fileName, const char * funcName, int line, int code, const char * msg, ...)
 	{
-		if (!gInitialized)
+		if (!gInitialized || !gEnable)
 		{
 			return;
 		}
@@ -79,11 +78,12 @@ namespace Log
 		vsnprintf_s(buffer, BUFFER_SIZE, BUFFER_SIZE-1, msg, args);
 		va_end(args);		
 
-		wstringstream output;
+		stringstream output;
 		output << "File: " << fileName << "\nFunction: " << funcName << "\nLine: " << line << "\nError: " << buffer << "\nMsg: " << lpMessageBuffer << "Code: " << code << " 0x" << hex << code << endl;
 		output << dec;
 
-		OutputDebugString(output.str().c_str());
+		OutputDebugStringA(output.str().c_str());
+		cout << output.str().c_str() << endl;
 
 		// Free the buffer allocated by the system.
 		LocalFree( lpMessageBuffer ); 
@@ -92,28 +92,26 @@ namespace Log
 
 	void Log(const char * msg, ...)
 	{
-		if (!gInitialized)
+		if (!gInitialized || !gEnable)
 		{
 			return;
 		}
 
-		if( gEnable )
-		{
 #ifdef LOG_THREAD_SAFE
 		CSLocker lock(&gLogCS);
 #endif
-	
-			char buffer[BUFFER_SIZE] = {0,};
-			va_list args;
-			va_start(args, msg);
-			vsnprintf_s(buffer, BUFFER_SIZE, BUFFER_SIZE-1, msg, args);
-			va_end(args);
-			
-			wstringstream output;
-			output << buffer << endl;
 
-			OutputDebugString(output.str().c_str());
-		}
+		char buffer[BUFFER_SIZE] = {0,};
+		va_list args;
+		va_start(args, msg);
+		vsnprintf_s(buffer, BUFFER_SIZE, BUFFER_SIZE-1, msg, args);
+		va_end(args);
+			
+		stringstream output;
+		output << buffer << endl;
+
+		OutputDebugStringA(output.str().c_str());
+		cout << output.str().c_str() << endl;
 	}
 
 	void Init()
@@ -137,14 +135,20 @@ namespace Log
 			ERROR_CODE(GetLastError(), "Log::CleanUp() - FreeLibrary() failed.");
 		}
 
+		gInitialized = false;
+
 #ifdef LOG_THREAD_SAFE
 		DeleteCriticalSection(&gLogCS);
 #endif
-		gInitialized = false;
 	}
 
 	void EnableTrace(bool enable)
 	{
 		gEnable = enable;
+	}
+
+	bool IsEnabled()
+	{
+		return gEnable;
 	}
 }

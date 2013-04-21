@@ -14,6 +14,7 @@ namespace Log
 	void Error(const char* fileName, const char* funcName, int line, int code, const char* msg, ...);
 
 	void EnableTrace(bool enable);
+	bool IsEnabled();
 }
 
 #define LOG(msg, ...) Log::Log(msg, __VA_ARGS__);
